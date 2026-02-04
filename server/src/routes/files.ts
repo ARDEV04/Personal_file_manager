@@ -128,9 +128,10 @@ const uploadToCloudinary = (buffer: Buffer, filename: string): Promise<{ url: st
         resource_type: 'auto',
         public_id: `${Date.now()}-${filename.replace(/\.[^/.]+$/, '')}`,
       },
-      (error, result) => {
+      (error: Error | undefined, result: { secure_url: string; public_id: string } | undefined) => {
         if (error) reject(error);
-        else resolve({ url: result!.secure_url, publicId: result!.public_id });
+        else if (result) resolve({ url: result.secure_url, publicId: result.public_id });
+        else reject(new Error('Upload failed'));
       }
     );
     uploadStream.end(buffer);
