@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fileApi } from '../services/api';
 import { useFileStore } from '../stores/fileStore';
 import toast from 'react-hot-toast';
-import type { FileNode, SortBy, SortOrder } from '../types';
+import type { FileNode } from '../types';
 import { useMemo } from 'react';
 import { getFileTypeCategory } from '../utils/formatters';
 
@@ -155,7 +155,7 @@ export function useDeleteFiles() {
 
       return { previousFiles };
     },
-    onError: (err, _ids, context) => {
+    onError: (_err, _ids, context) => {
       // Rollback on error
       if (context?.previousFiles) {
         queryClient.setQueryData(fileKeys.list(currentFolderId), context.previousFiles);

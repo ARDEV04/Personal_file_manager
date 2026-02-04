@@ -1,7 +1,7 @@
 import { memo, useCallback } from 'react';
 import { useFileStore } from '../../stores/fileStore';
 import { FileIcon } from './FileIcon';
-import { formatFileSize, formatDate } from '../../utils/formatters';
+import { formatFileSize } from '../../utils/formatters';
 import type { FileNode } from '../../types';
 
 interface FileGridProps {

@@ -5,10 +5,6 @@ import {
   Download,
   Pencil,
   Trash2,
-  Copy,
-  Scissors,
-  FolderPlus,
-  Upload,
 } from 'lucide-react';
 import { useFileStore } from '../../stores/fileStore';
 import { fileApi } from '../../services/api';
