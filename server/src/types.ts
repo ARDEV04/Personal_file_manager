@@ -6,6 +6,8 @@ export interface FileNode {
   path: string;
   size: number | null;
   mimeType: string | null;
+  cloudinaryUrl: string | null;
+  cloudinaryId: string | null;
   createdAt: string;
   updatedAt: string;
 }

@@ -27,6 +27,8 @@ export function initializeDatabase() {
       path TEXT NOT NULL,
       size INTEGER,
       mimeType TEXT,
+      cloudinaryUrl TEXT,
+      cloudinaryId TEXT,
       createdAt TEXT NOT NULL DEFAULT (datetime('now')),
       updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (parentId) REFERENCES files(id) ON DELETE CASCADE

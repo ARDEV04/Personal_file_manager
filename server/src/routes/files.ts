@@ -1,28 +1,11 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { fileService } from '../services/fileService.js';
+import { cloudinary } from '../config/cloudinary.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const uploadsDir = path.join(__dirname, '../../uploads');
-
-// Ensure uploads directory exists
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
+// Configure multer for memory storage (for Cloudinary upload)
+const storage = multer.memoryStorage();
 
 const upload = multer({ 
   storage,
@@ -136,8 +119,26 @@ filesRouter.post('/', (req: Request, res: Response) => {
   }
 });
 
-// POST /api/files/upload - Upload files
-filesRouter.post('/upload', upload.array('files', 10), (req: Request, res: Response) => {
+// Helper function to upload to Cloudinary
+const uploadToCloudinary = (buffer: Buffer, filename: string): Promise<{ url: string; publicId: string }> => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'file-manager',
+        resource_type: 'auto',
+        public_id: `${Date.now()}-${filename.replace(/\.[^/.]+$/, '')}`,
+      },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve({ url: result!.secure_url, publicId: result!.public_id });
+      }
+    );
+    uploadStream.end(buffer);
+  });
+};
+
+// POST /api/files/upload - Upload files to Cloudinary
+filesRouter.post('/upload', upload.array('files', 10), async (req: Request, res: Response) => {
   try {
     const parentId = req.body.parentId || null;
     const files = req.files as Express.Multer.File[];
@@ -146,25 +147,31 @@ filesRouter.post('/upload', upload.array('files', 10), (req: Request, res: Respo
       return res.status(400).json({ error: 'No files provided' });
     }
 
-    const uploadedFiles = files.map(file => {
-      // Check for duplicate name
-      let finalName = file.originalname;
-      let counter = 1;
-      while (fileService.nameExists(finalName, parentId)) {
-        const ext = path.extname(file.originalname);
-        const baseName = path.basename(file.originalname, ext);
-        finalName = `${baseName} (${counter})${ext}`;
-        counter++;
-      }
+    const uploadedFiles = await Promise.all(
+      files.map(async (file) => {
+        // Check for duplicate name
+        let finalName = file.originalname;
+        let counter = 1;
+        while (fileService.nameExists(finalName, parentId)) {
+          const ext = path.extname(file.originalname);
+          const baseName = path.basename(file.originalname, ext);
+          finalName = `${baseName} (${counter})${ext}`;
+          counter++;
+        }
 
-      return fileService.createUploadedFile(
-        finalName,
-        parentId,
-        file.size,
-        file.mimetype,
-        file.filename
-      );
-    });
+        // Upload to Cloudinary
+        const { url, publicId } = await uploadToCloudinary(file.buffer, file.originalname);
+
+        return fileService.createUploadedFile(
+          finalName,
+          parentId,
+          file.size,
+          file.mimetype,
+          url,  // Store Cloudinary URL instead of local path
+          publicId
+        );
+      })
+    );
 
     res.status(201).json(uploadedFiles);
   } catch (error) {
@@ -201,9 +208,24 @@ filesRouter.patch('/:id', (req: Request, res: Response) => {
 });
 
 // DELETE /api/files/:id - Delete file or folder
-filesRouter.delete('/:id', (req: Request, res: Response) => {
+filesRouter.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const file = fileService.getFileById(id);
+    
+    if (!file) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    // Delete from Cloudinary if it's a file with cloudinaryId
+    if (file.type === 'file' && file.cloudinaryId) {
+      try {
+        await cloudinary.uploader.destroy(file.cloudinaryId);
+      } catch (cloudinaryError) {
+        console.error('Error deleting from Cloudinary:', cloudinaryError);
+      }
+    }
+
     const success = fileService.deleteFile(id);
     
     if (!success) {
@@ -217,7 +239,7 @@ filesRouter.delete('/:id', (req: Request, res: Response) => {
   }
 });
 
-// GET /api/files/:id/download - Download file
+// GET /api/files/:id/download - Download file (redirect to Cloudinary URL)
 filesRouter.get('/:id/download', (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -231,8 +253,12 @@ filesRouter.get('/:id/download', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Cannot download a folder' });
     }
 
-    // For demo purposes, send a placeholder response
-    // In a real app, you'd stream the actual file from storage
+    // Redirect to Cloudinary URL for download
+    if (file.cloudinaryUrl) {
+      return res.redirect(file.cloudinaryUrl);
+    }
+
+    // Fallback for files without Cloudinary URL
     res.setHeader('Content-Type', file.mimeType || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${file.name}"`);
     res.send(`This is a placeholder for file: ${file.name}`);

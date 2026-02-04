@@ -56,7 +56,8 @@ export class FileService {
     parentId: string | null, 
     size: number, 
     mimeType: string,
-    storagePath: string
+    cloudinaryUrl: string,
+    cloudinaryId: string
   ): FileNode {
     const id = uuidv4();
     const parentPath = parentId 
@@ -65,11 +66,11 @@ export class FileService {
     const path = `${parentPath}/${name}`;
 
     const stmt = db.prepare(`
-      INSERT INTO files (id, name, type, parentId, path, size, mimeType, createdAt, updatedAt)
-      VALUES (?, ?, 'file', ?, ?, ?, ?, datetime('now'), datetime('now'))
+      INSERT INTO files (id, name, type, parentId, path, size, mimeType, cloudinaryUrl, cloudinaryId, createdAt, updatedAt)
+      VALUES (?, ?, 'file', ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
     `);
 
-    stmt.run(id, name, parentId, path, size, mimeType);
+    stmt.run(id, name, parentId, path, size, mimeType, cloudinaryUrl, cloudinaryId);
     return this.getFileById(id)!;
   }
 
